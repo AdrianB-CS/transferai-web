@@ -1,4 +1,4 @@
-const BASE = "/assist-api";
+const BASE = "/api/assist";
 
 async function get(path, params = {}) {
   const url = new URL(`${BASE}/${path}`);
