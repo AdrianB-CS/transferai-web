@@ -14,6 +14,7 @@ export default function Explorer() {
   const [loadingAgreements, setLoadingAgreements] = useState(false);
   const [loadingCourses, setLoadingCourses] = useState(false);
   const [error, setError] = useState(null);
+  const [search, setSearch] = useState("");
 
   useEffect(() => {
     Promise.all([getInstitutions(), getAcademicYears()])
@@ -22,12 +23,12 @@ export default function Explorer() {
         setYears(yrs);
         if (yrs.length) setYearId(String(yrs[0].id));
       })
-      .catch(() => setError("Could not load institutions. ASSIST.org may be temporarily unavailable."))
+      .catch(() => setError("Could not load institutions."))
       .finally(() => setLoadingMeta(false));
   }, []);
 
   const ccs = institutions.filter((i) => i.isCommunityCollege).sort((a, b) => a.name.localeCompare(b.name));
-  const ucs = institutions.filter((i) => !i.isCommunityCollege).sort((a, b) => a.name.localeCompare(b.name));
+  const unis = institutions.filter((i) => !i.isCommunityCollege).sort((a, b) => a.name.localeCompare(b.name));
 
   async function handleSearch() {
     if (!sendingId || !receivingId || !yearId) return;
@@ -36,17 +37,19 @@ export default function Explorer() {
     setSelectedKey(null);
     setCourseRows([]);
     setError(null);
+    setSearch("");
     try {
       const results = await listAgreements(Number(receivingId), Number(sendingId), Number(yearId), "Major");
       setAgreements(results);
-    } catch (e) {
-      setError("Could not fetch agreements. The ASSIST.org API may be rate-limiting or unavailable.");
+      if (!results.length) setError("No agreements found for this combination.");
+    } catch {
+      setError("Could not fetch agreements. Please try again.");
     } finally {
       setLoadingAgreements(false);
     }
   }
 
-  async function handleSelectAgreement(key, name) {
+  async function handleSelectAgreement(key) {
     setSelectedKey(key);
     setCourseRows([]);
     setLoadingCourses(true);
@@ -54,158 +57,177 @@ export default function Explorer() {
       const detail = await getAgreement(key);
       setCourseRows(parseCourseRows(detail));
     } catch {
-      setError("Could not load course details for this agreement.");
+      setError("Could not load course details.");
     } finally {
       setLoadingCourses(false);
     }
   }
 
+  const filteredAgreements = agreements.filter((a) =>
+    (a.label || a.name || "").toLowerCase().includes(search.toLowerCase())
+  );
+
   const selectedAgreement = agreements.find((a) => a.key === selectedKey);
+  const articulatedCount = courseRows.filter((r) => r.sending).length;
 
   return (
-    <div>
-      <h1 className="section-title">Agreement Explorer</h1>
-      <p className="section-sub">Browse official course-by-course articulation agreements between California community colleges and UC/CSU campuses.</p>
+    <>
+      <div className="topbar">
+        <div>
+          <div className="page-title">Agreement Explorer</div>
+          <div className="page-sub">Browse official course-by-course articulation agreements</div>
+        </div>
+        {agreements.length > 0 && (
+          <div className="topbar-actions">
+            <input
+              className="field"
+              style={{ padding: "7px 12px", border: "1px solid var(--border2)", borderRadius: "var(--radius-sm)", fontSize: 13, background: "var(--bg)", outline: "none", width: 200 }}
+              placeholder="Filter majors..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+            />
+          </div>
+        )}
+      </div>
 
-      <div className="card" style={{ marginBottom: 24 }}>
-        <div className="row" style={{ marginBottom: 16 }}>
-          <div className="field">
-            <label>Community College</label>
-            {loadingMeta ? (
-              <select disabled><option>Loading...</option></select>
-            ) : (
-              <select value={sendingId} onChange={(e) => setSendingId(e.target.value)}>
+      <div className="page-body">
+        <div className="selector-card">
+          <div className="selector-grid">
+            <div className="field">
+              <label>Community College</label>
+              <select value={sendingId} onChange={(e) => setSendingId(e.target.value)} disabled={loadingMeta}>
                 <option value="">Select a CC...</option>
                 {ccs.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
               </select>
-            )}
-          </div>
-          <div className="field">
-            <label>Transfer Destination</label>
-            {loadingMeta ? (
-              <select disabled><option>Loading...</option></select>
-            ) : (
-              <select value={receivingId} onChange={(e) => setReceivingId(e.target.value)}>
-                <option value="">Select UC/CSU...</option>
-                {ucs.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
-              </select>
-            )}
-          </div>
-          <div className="field" style={{ maxWidth: 160 }}>
-            <label>Academic Year</label>
-            <select value={yearId} onChange={(e) => setYearId(e.target.value)}>
-              {years.map((y) => <option key={y.id} value={y.id}>{y.code}</option>)}
-            </select>
-          </div>
-          <button
-            className="btn btn-primary"
-            onClick={handleSearch}
-            disabled={!sendingId || !receivingId || !yearId || loadingAgreements}
-            style={{ alignSelf: "flex-end", whiteSpace: "nowrap" }}
-          >
-            {loadingAgreements ? <span className="spinner" /> : (
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
-            )}
-            {loadingAgreements ? "Searching..." : "Find Agreements"}
-          </button>
-        </div>
-      </div>
-
-      {error && <div className="error-box">{error}</div>}
-
-      {!loadingAgreements && agreements.length > 0 && (
-        <div style={{ display: "grid", gridTemplateColumns: selectedKey ? "280px 1fr" : "1fr", gap: 16, alignItems: "start" }}>
-          <div className="card" style={{ padding: 0 }}>
-            <div style={{ padding: "14px 16px", borderBottom: "1px solid var(--border)", fontSize: 13, fontWeight: 500, color: "var(--text2)" }}>
-              {agreements.length} major agreement{agreements.length !== 1 ? "s" : ""}
             </div>
-            <ul style={{ listStyle: "none", maxHeight: 520, overflowY: "auto" }}>
-              {agreements.map((a) => (
-                <li key={a.key}>
-                  <button
-                    onClick={() => handleSelectAgreement(a.key, a.label)}
-                    style={{
-                      width: "100%", textAlign: "left", padding: "11px 16px",
-                      background: selectedKey === a.key ? "var(--accent-bg)" : "transparent",
-                      border: "none", borderBottom: "1px solid var(--border)",
-                      cursor: "pointer", fontSize: 13,
-                      color: selectedKey === a.key ? "var(--accent-text)" : "var(--text)",
-                      fontFamily: "var(--font)", fontWeight: selectedKey === a.key ? 500 : 400,
-                      transition: "background 0.12s",
-                    }}
+            <div className="field">
+              <label>Transfer Destination</label>
+              <select value={receivingId} onChange={(e) => setReceivingId(e.target.value)} disabled={loadingMeta}>
+                <option value="">Select UC/CSU...</option>
+                <optgroup label="UC Campuses">
+                  {unis.filter(u => u.category === "UC").map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+                </optgroup>
+                <optgroup label="CSU Campuses">
+                  {unis.filter(u => u.category === "CSU").map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+                </optgroup>
+                <optgroup label="Other">
+                  {unis.filter(u => u.category !== "UC" && u.category !== "CSU").map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+                </optgroup>
+              </select>
+            </div>
+            <div className="field">
+              <label>Academic Year</label>
+              <select value={yearId} onChange={(e) => setYearId(e.target.value)}>
+                {years.map((y) => <option key={y.id} value={y.id}>{y.code}</option>)}
+              </select>
+            </div>
+            <button
+              className="btn btn-primary"
+              onClick={handleSearch}
+              disabled={!sendingId || !receivingId || !yearId || loadingAgreements}
+              style={{ alignSelf: "flex-end" }}
+            >
+              {loadingAgreements ? <span className="spinner" /> : (
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+              )}
+              {loadingAgreements ? "Searching..." : "Find Agreements"}
+            </button>
+          </div>
+        </div>
+
+        {error && <div className="error-box">{error}</div>}
+
+        {filteredAgreements.length > 0 && (
+          <div className="results-grid">
+            <div className="major-list">
+              <div className="major-list-header">
+                {filteredAgreements.length} major{filteredAgreements.length !== 1 ? "s" : ""}
+              </div>
+              <div className="major-list-scroll">
+                {filteredAgreements.map((a) => (
+                  <div
+                    key={a.key}
+                    className={`major-item ${selectedKey === a.key ? "active" : ""}`}
+                    onClick={() => handleSelectAgreement(a.key)}
                   >
                     {a.label || a.name || "Unnamed"}
-                  </button>
-                </li>
-              ))}
-            </ul>
-          </div>
+                  </div>
+                ))}
+              </div>
+            </div>
 
-          {selectedKey && (
-            <div className="card" style={{ padding: 0 }}>
-              <div style={{ padding: "14px 20px", borderBottom: "1px solid var(--border)", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                <div>
-                  <div style={{ fontSize: 15, fontWeight: 600 }}>{selectedAgreement?.label || "Agreement"}</div>
-                  <div style={{ fontSize: 12, color: "var(--text2)", marginTop: 2 }}>Course equivalencies</div>
+            {selectedKey ? (
+              <div className="course-panel">
+                <div className="course-panel-header">
+                  <div>
+                    <div className="course-panel-title">{selectedAgreement?.label || "Agreement"}</div>
+                    <div className="course-panel-sub">Course equivalencies · {years.find(y => String(y.id) === yearId)?.code}</div>
+                  </div>
+                  {!loadingCourses && courseRows.length > 0 && (
+                    <span className={`badge ${articulatedCount > 0 ? "badge-green" : "badge-amber"}`}>
+                      {articulatedCount} articulated
+                    </span>
+                  )}
                 </div>
+
+                {loadingCourses && (
+                  <div style={{ display: "flex", justifyContent: "center", padding: 40 }}>
+                    <span className="spinner spinner-dark" />
+                  </div>
+                )}
+
                 {!loadingCourses && courseRows.length > 0 && (
-                  <span className="tag tag-green">{courseRows.filter(r => r.sending).length} articulated</span>
+                  <div style={{ overflowX: "auto" }}>
+                    <table className="course-table">
+                      <thead>
+                        <tr>
+                          <th style={{ width: "42%" }}>UC/CSU Course</th>
+                          <th style={{ width: "8%" }}>Units</th>
+                          <th>CC Equivalent</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {courseRows.map((row, i) => (
+                          <tr key={i}>
+                            <td className="td-recv">{row.receiving}</td>
+                            <td className="td-units">{row.units}</td>
+                            <td>
+                              {row.sending
+                                ? <span className="td-send">{row.sending}</span>
+                                : <span className="td-none">{row.noArticulation}</span>
+                              }
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+
+                {!loadingCourses && courseRows.length === 0 && (
+                  <div className="empty-state"><p>No course data available.</p></div>
                 )}
               </div>
-
-              {loadingCourses && (
-                <div style={{ display: "flex", justifyContent: "center", padding: 40 }}>
-                  <span className="spinner spinner-dark" />
-                </div>
-              )}
-
-              {!loadingCourses && courseRows.length > 0 && (
-                <div style={{ overflowX: "auto" }}>
-                  <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
-                    <thead>
-                      <tr style={{ background: "var(--surface2)" }}>
-                        <th style={{ padding: "10px 20px", textAlign: "left", fontWeight: 500, color: "var(--text2)", borderBottom: "1px solid var(--border)", width: "40%" }}>UC/CSU Course</th>
-                        <th style={{ padding: "10px 12px", textAlign: "left", fontWeight: 500, color: "var(--text2)", borderBottom: "1px solid var(--border)", width: "8%" }}>Units</th>
-                        <th style={{ padding: "10px 20px", textAlign: "left", fontWeight: 500, color: "var(--text2)", borderBottom: "1px solid var(--border)" }}>CC Equivalent</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {courseRows.map((row, i) => (
-                        <tr key={i} style={{ borderBottom: "1px solid var(--border)", background: i % 2 === 0 ? "transparent" : "var(--surface2)" }}>
-                          <td style={{ padding: "10px 20px", color: "var(--text)" }}>{row.receiving}</td>
-                          <td style={{ padding: "10px 12px", color: "var(--text3)", fontSize: 12 }}>{row.units}</td>
-                          <td style={{ padding: "10px 20px" }}>
-                            {row.sending ? (
-                              <span style={{ color: "var(--accent-text)" }}>{row.sending}</span>
-                            ) : (
-                              <span style={{ color: "var(--text3)", fontStyle: "italic" }}>{row.noArticulation}</span>
-                            )}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-
-              {!loadingCourses && courseRows.length === 0 && (
+            ) : (
+              <div className="course-panel">
                 <div className="empty-state">
-                  <p>No course data available for this agreement.</p>
+                  <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                  <p>Select a major to see course equivalencies</p>
                 </div>
-              )}
-            </div>
-          )}
-        </div>
-      )}
-
-      {!loadingAgreements && agreements.length === 0 && sendingId && receivingId && !error && (
-        <div className="card">
-          <div className="empty-state">
-            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
-            <p>Hit "Find Agreements" to load articulation data.</p>
+              </div>
+            )}
           </div>
-        </div>
-      )}
-    </div>
+        )}
+
+        {!loadingAgreements && agreements.length === 0 && !error && (
+          <div className="course-panel">
+            <div className="empty-state">
+              <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+              <p>Select a community college and destination, then click Find Agreements</p>
+            </div>
+          </div>
+        )}
+      </div>
+    </>
   );
 }

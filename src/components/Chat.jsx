@@ -1,23 +1,21 @@
 import { useState, useRef, useEffect } from "react";
 
-const SYSTEM_PROMPT = `You are an AI transfer counselor specializing in California community college to UC/CSU transfer planning. You help students understand articulation agreements, course requirements, and transfer pathways using data from ASSIST.org.
+const SYSTEM_PROMPT = `You are Alex, a warm and knowledgeable AI transfer counselor specializing in California community college to UC/CSU transfer planning. You help students navigate articulation agreements, course requirements, and transfer pathways using data from ASSIST.org.
 
-You can answer questions like:
-- What classes do I need to take at [CC] to transfer to [UC] for [major]?
+You answer questions like:
+- What classes do I need at [CC] to transfer to [UC] for [major]?
 - Does [CC course] articulate to [UC course]?
-- What should I prioritize this semester for transfer?
+- What should I prioritize this semester?
 - Explain IGETC, TAG, and other transfer programs
 - Help me understand my articulation agreement
 
-Be conversational, encouraging, and specific. When you don't know exact current articulation data, remind students to verify on ASSIST.org since agreements update yearly. Always emphasize that you're an AI assistant and they should confirm with their counselor for official guidance.
-
-Keep responses concise but helpful. Use bullet points for lists of requirements. Be warm and supportive — many CC students are first-generation and navigating this alone.`;
+Be warm, encouraging, and specific. When you don't know exact current articulation data, remind students to verify on ASSIST.org. Always note you're an AI and they should confirm with their counselor for official guidance. Use clear formatting with bullet points for lists. Many CC students are first-generation — be supportive and accessible.`;
 
 const SUGGESTED = [
   "What classes do I need for CS at UC Berkeley from De Anza?",
-  "Explain how IGETC works and when I should use it",
+  "Explain how IGETC works and when to use it",
   "What is TAG and which UCs offer it?",
-  "How do I plan my courses for transfer in 2 years?",
+  "How do I plan my courses to transfer in 2 years?",
 ];
 
 export default function Chat() {
@@ -26,6 +24,7 @@ export default function Chat() {
   const [loading, setLoading] = useState(false);
   const [apiKey, setApiKey] = useState(() => localStorage.getItem("transferai_key") || process.env.REACT_APP_ANTHROPIC_KEY || "");
   const [showKeyInput, setShowKeyInput] = useState(false);
+  const [keyDraft, setKeyDraft] = useState("");
   const bottomRef = useRef(null);
   const inputRef = useRef(null);
 
@@ -33,21 +32,22 @@ export default function Chat() {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, loading]);
 
-  function saveKey(k) {
-    setApiKey(k);
-    localStorage.setItem("transferai_key", k);
-    setShowKeyInput(false);
+  function saveKey() {
+    if (keyDraft.trim()) {
+      setApiKey(keyDraft.trim());
+      localStorage.setItem("transferai_key", keyDraft.trim());
+      setShowKeyInput(false);
+      setKeyDraft("");
+    }
   }
 
   async function sendMessage(text) {
     const content = text || input.trim();
     if (!content || loading) return;
     setInput("");
-
     const newMessages = [...messages, { role: "user", content }];
     setMessages(newMessages);
     setLoading(true);
-
     try {
       const res = await fetch("https://api.anthropic.com/v1/messages", {
         method: "POST",
@@ -64,21 +64,15 @@ export default function Chat() {
           messages: newMessages,
         }),
       });
-
       if (!res.ok) {
         const err = await res.json();
-        throw new Error(err.error?.message || `API error ${res.status}`);
+        throw new Error(err.error?.message || `Error ${res.status}`);
       }
-
       const data = await res.json();
       const reply = data.content?.map((b) => b.text || "").join("") || "";
       setMessages([...newMessages, { role: "assistant", content: reply }]);
     } catch (e) {
-      setMessages([...newMessages, {
-        role: "assistant",
-        content: `⚠️ ${e.message}. Please check your API key in settings.`,
-        isError: true,
-      }]);
+      setMessages([...newMessages, { role: "assistant", content: `Something went wrong: ${e.message}`, isError: true }]);
     } finally {
       setLoading(false);
       inputRef.current?.focus();
@@ -86,72 +80,77 @@ export default function Chat() {
   }
 
   function handleKey(e) {
-    if (e.key === "Enter" && !e.shiftKey) {
-      e.preventDefault();
-      sendMessage();
-    }
+    if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendMessage(); }
   }
 
   return (
-    <div>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 24 }}>
+    <>
+      <div className="topbar">
         <div>
-          <h1 className="section-title">AI Counselor</h1>
-          <p className="section-sub">Ask anything about California transfer planning, articulation, and course requirements.</p>
+          <div className="page-title">AI Counselor</div>
+          <div className="page-sub">Ask Alex anything about California transfer planning</div>
         </div>
-        <button className="btn btn-ghost" onClick={() => setShowKeyInput(!showKeyInput)} style={{ fontSize: 13, gap: 6 }}>
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
-          API Key
-        </button>
+        <div className="topbar-actions">
+          {messages.length > 0 && (
+            <button className="btn" onClick={() => setMessages([])}>
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-3.51"/></svg>
+              Clear
+            </button>
+          )}
+          <button className="btn" onClick={() => setShowKeyInput(!showKeyInput)}>
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+            {apiKey ? "API Key ✓" : "Add API Key"}
+          </button>
+        </div>
       </div>
 
-      {showKeyInput && (
-        <div className="card" style={{ marginBottom: 20, display: "flex", gap: 10, alignItems: "flex-end" }}>
-          <div className="field" style={{ flex: 1 }}>
-            <label>Anthropic API Key</label>
-            <input
-              type="password"
-              placeholder="sk-ant-..."
-              defaultValue={apiKey}
-              onBlur={(e) => saveKey(e.target.value)}
-              autoFocus
-            />
-          </div>
-          <button className="btn btn-primary" onClick={() => setShowKeyInput(false)}>Save</button>
-        </div>
-      )}
-
-      {!apiKey && (
-        <div style={{ background: "#fffbeb", border: "1px solid #fde68a", borderRadius: 8, padding: "12px 16px", fontSize: 13, color: "#92400e", marginBottom: 20 }}>
-          <strong>API key required</strong> — Add your Anthropic API key above to enable AI chat. Get one free at{" "}
-          <a href="https://console.anthropic.com" target="_blank" rel="noreferrer" style={{ color: "#92400e" }}>console.anthropic.com</a>.
-        </div>
-      )}
-
-      <div className="card" style={{ padding: 0, marginBottom: 16 }}>
-        <div style={{ minHeight: 420, maxHeight: 520, overflowY: "auto", padding: "20px" }}>
-          {messages.length === 0 && (
-            <div>
-              <div style={{ textAlign: "center", marginBottom: 28 }}>
-                <div style={{ width: 48, height: 48, borderRadius: 12, background: "var(--accent-bg)", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 12px" }}>
-                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M22 10v6M2 10l10-5 10 5-10 5z"/><path d="M6 12v5c3 3 9 3 12 0v-5"/></svg>
-                </div>
-                <p style={{ fontSize: 14, color: "var(--text2)" }}>Ask me anything about transfer planning</p>
+      <div className="chat-wrap">
+        <div className="chat-messages">
+          {showKeyInput && (
+            <div className="key-input-row">
+              <div className="field" style={{ flex: 1 }}>
+                <label>Anthropic API Key</label>
+                <input
+                  type="password"
+                  placeholder="sk-ant-..."
+                  value={keyDraft}
+                  onChange={(e) => setKeyDraft(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && saveKey()}
+                  autoFocus
+                />
               </div>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+              <button className="btn btn-primary" onClick={saveKey}>Save</button>
+            </div>
+          )}
+
+          {!apiKey && (
+            <div className="warn-box">
+              Add your Anthropic API key above to start chatting. Get one free at{" "}
+              <a href="https://console.anthropic.com" target="_blank" rel="noreferrer">console.anthropic.com</a>.
+            </div>
+          )}
+
+          {messages.length === 0 && (
+            <div style={{ maxWidth: 520 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 16 }}>
+                <div className="msg-avatar">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 10v6M2 10l10-5 10 5-10 5z"/><path d="M6 12v5c3 3 9 3 12 0v-5"/></svg>
+                </div>
+                <div>
+                  <div style={{ fontWeight: 600, fontSize: 14, color: "var(--text)" }}>Alex, your transfer counselor</div>
+                  <div style={{ fontSize: 12, color: "var(--text3)" }}>Powered by AI · Verify with ASSIST.org</div>
+                </div>
+              </div>
+              <p style={{ fontSize: 14, color: "var(--text2)", marginBottom: 16, lineHeight: 1.6 }}>
+                Hi! I can help you plan your transfer from any California community college to a UC or CSU. Ask me about articulation agreements, IGETC, TAG, or how to plan your courses.
+              </p>
+              <div className="chat-suggested">
                 {SUGGESTED.map((s) => (
                   <button
                     key={s}
+                    className="suggested-btn"
                     onClick={() => sendMessage(s)}
                     disabled={!apiKey}
-                    style={{
-                      textAlign: "left", padding: "10px 14px", background: "var(--surface2)",
-                      border: "1px solid var(--border)", borderRadius: 8, cursor: apiKey ? "pointer" : "not-allowed",
-                      fontSize: 13, color: "var(--text2)", fontFamily: "var(--font)",
-                      transition: "background 0.12s", lineHeight: 1.4, opacity: apiKey ? 1 : 0.5,
-                    }}
-                    onMouseEnter={(e) => { if (apiKey) e.currentTarget.style.background = "var(--border)"; }}
-                    onMouseLeave={(e) => { e.currentTarget.style.background = "var(--surface2)"; }}
                   >
                     {s}
                   </button>
@@ -161,35 +160,26 @@ export default function Chat() {
           )}
 
           {messages.map((msg, i) => (
-            <div key={i} style={{ marginBottom: 20, display: "flex", gap: 12, justifyContent: msg.role === "user" ? "flex-end" : "flex-start" }}>
+            <div key={i} className={`msg ${msg.role === "user" ? "msg-user" : "msg-assistant"}`}>
               {msg.role === "assistant" && (
-                <div style={{ width: 30, height: 30, borderRadius: 8, background: "var(--accent-bg)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, marginTop: 2 }}>
-                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M22 10v6M2 10l10-5 10 5-10 5z"/><path d="M6 12v5c3 3 9 3 12 0v-5"/></svg>
+                <div className="msg-avatar">
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 10v6M2 10l10-5 10 5-10 5z"/><path d="M6 12v5c3 3 9 3 12 0v-5"/></svg>
                 </div>
               )}
-              <div style={{
-                maxWidth: "72%",
-                padding: "10px 14px",
-                borderRadius: msg.role === "user" ? "12px 12px 4px 12px" : "12px 12px 12px 4px",
-                background: msg.role === "user" ? "var(--accent)" : "var(--surface2)",
-                color: msg.role === "user" ? "white" : "var(--text)",
-                fontSize: 14,
-                lineHeight: 1.6,
-                whiteSpace: "pre-wrap",
-              }}>
+              <div className={`msg-bubble ${msg.isError ? "msg-error" : ""}`}>
                 {msg.content}
               </div>
             </div>
           ))}
 
           {loading && (
-            <div style={{ display: "flex", gap: 12, alignItems: "center", marginBottom: 20 }}>
-              <div style={{ width: 30, height: 30, borderRadius: 8, background: "var(--accent-bg)", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M22 10v6M2 10l10-5 10 5-10 5z"/><path d="M6 12v5c3 3 9 3 12 0v-5"/></svg>
+            <div className="msg msg-assistant">
+              <div className="msg-avatar">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 10v6M2 10l10-5 10 5-10 5z"/><path d="M6 12v5c3 3 9 3 12 0v-5"/></svg>
               </div>
-              <div style={{ display: "flex", gap: 5, padding: "12px 16px", background: "var(--surface2)", borderRadius: "12px 12px 12px 4px" }}>
+              <div className="msg-bubble" style={{ display: "flex", gap: 5, alignItems: "center", padding: "12px 16px" }}>
                 {[0,1,2].map(i => (
-                  <span key={i} style={{ width: 6, height: 6, borderRadius: "50%", background: "var(--text3)", animation: `bounce 1.2s ease-in-out ${i * 0.2}s infinite` }} />
+                  <span key={i} style={{ width: 6, height: 6, borderRadius: "50%", background: "var(--text3)", display: "inline-block", animation: `bounce 1.2s ease-in-out ${i * 0.2}s infinite` }} />
                 ))}
               </div>
             </div>
@@ -197,47 +187,30 @@ export default function Chat() {
           <div ref={bottomRef} />
         </div>
 
-        <div style={{ borderTop: "1px solid var(--border)", padding: 16, display: "flex", gap: 10 }}>
+        <div className="chat-input-wrap">
           <textarea
             ref={inputRef}
+            className="chat-input"
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={handleKey}
-            placeholder={apiKey ? "Ask about transfer requirements, course equivalencies..." : "Add your API key above to start chatting"}
+            placeholder={apiKey ? "Ask about transfer requirements, course equivalencies, IGETC..." : "Add your API key to start chatting"}
             disabled={!apiKey || loading}
             rows={1}
-            style={{
-              flex: 1, fontFamily: "var(--font)", fontSize: 14, padding: "9px 14px",
-              border: "1px solid var(--border2)", borderRadius: 8, outline: "none",
-              resize: "none", lineHeight: 1.5, color: "var(--text)",
-              background: "var(--surface)",
-            }}
           />
           <button
             className="btn btn-primary"
             onClick={() => sendMessage()}
             disabled={!input.trim() || !apiKey || loading}
-            style={{ alignSelf: "flex-end", padding: "9px 16px" }}
           >
-            {loading ? <span className="spinner" style={{ width: 16, height: 16 }} /> : (
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+            {loading ? <span className="spinner" style={{ width: 14, height: 14 }} /> : (
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
             )}
           </button>
         </div>
       </div>
 
-      {messages.length > 0 && (
-        <button className="btn btn-ghost" onClick={() => setMessages([])} style={{ fontSize: 13 }}>
-          Clear conversation
-        </button>
-      )}
-
-      <style>{`
-        @keyframes bounce {
-          0%, 80%, 100% { transform: translateY(0); opacity: 0.4; }
-          40% { transform: translateY(-6px); opacity: 1; }
-        }
-      `}</style>
-    </div>
+      <style>{`@keyframes bounce { 0%,80%,100%{transform:translateY(0);opacity:0.35} 40%{transform:translateY(-5px);opacity:1} }`}</style>
+    </>
   );
 }
