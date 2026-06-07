@@ -24,7 +24,7 @@ export default function Chat() {
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
-  const [apiKey, setApiKey] = useState(() => localStorage.getItem("transferai_key") || "");
+  const [apiKey, setApiKey] = useState(() => localStorage.getItem("transferai_key") || process.env.REACT_APP_ANTHROPIC_KEY || "");
   const [showKeyInput, setShowKeyInput] = useState(false);
   const bottomRef = useRef(null);
   const inputRef = useRef(null);

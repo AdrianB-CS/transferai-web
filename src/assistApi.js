@@ -1,4 +1,4 @@
-const BASE = "https://prod.assistng.org/articulation/api";
+const BASE = "/assist-api";
 
 async function get(path, params = {}) {
   const url = new URL(`${BASE}/${path}`);

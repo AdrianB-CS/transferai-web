@@ -1,0 +1,11 @@
+{
+  "buildCommand": "npm run build",
+  "outputDirectory": "build",
+  "framework": "create-react-app",
+  "rewrites": [
+    {
+      "source": "/assist-api/:path*",
+      "destination": "https://prod.assistng.org/articulation/api/:path*"
+    }
+  ]
+}
